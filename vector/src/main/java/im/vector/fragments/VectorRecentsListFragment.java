@@ -33,6 +33,7 @@ import android.widget.ExpandableListView;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 
+import org.matrix.androidsdk.MXDataHandler;
 import org.matrix.androidsdk.MXSession;
 import org.matrix.androidsdk.data.Room;
 import org.matrix.androidsdk.data.RoomAccountData;
@@ -196,6 +197,8 @@ public class VectorRecentsListFragment extends Fragment implements VectorRoomSum
                     if (mAdapter.resetUnreadCount(groupPosition, childPosition)) {
                         session.getDataHandler().getStore().flushSummary(roomSummary);
                     }
+                    // update badge unread count in case device is offline
+                    offlineRefreshBadgeUnreadCount();
 
                     // launch corresponding room activity
                     if (null != roomId) {
@@ -1045,5 +1048,40 @@ public class VectorRecentsListFragment extends Fragment implements VectorRoomSum
     @Override
     public void moveToLowPriority(MXSession session, String roomId) {
         updateRoomTag(session, roomId, null, RoomTag.ROOM_TAG_LOW_PRIORITY);
+    }
+
+    /**
+     * Refresh the badge count when the device is offline.
+     * Notifications rooms are parsed to track the notification count.
+     */
+    private void offlineRefreshBadgeUnreadCount() {
+        // sanity check
+        MXDataHandler dataHandler = mSession.getDataHandler();
+        if((null == dataHandler) || (null == dataHandler.getStore())) {
+            Log.w(LOG_TAG,"## offlineRefreshBadgeUnreadCount(): unexpected null values - return");
+            return;
+        }
+
+        // update the badge count only if the device is offline
+        if(!Matrix.getInstance(getActivity()).isConnected()) {
+            ArrayList<Room> roomCompleteList = new ArrayList<>(dataHandler.getStore().getRooms());
+            int unreadRoomsCount=0;
+            Room childRoom;
+
+            // compute the number of rooms with unread notifications
+            if (null != roomCompleteList) {
+                for (Room room : roomCompleteList) {
+                    childRoom = mSession.getDataHandler().getStore().getRoom(room.getRoomId());
+                    if (null != childRoom) {
+                        if (childRoom.getNotificationCount() > 0) {
+                            unreadRoomsCount++;
+                        }
+                    }
+                }
+
+                // update the badge counter
+                CommonActivityUtils.updateBadgeCount(getContext(), unreadRoomsCount);
+            }
+        }
     }
 }
